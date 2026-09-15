@@ -3,16 +3,22 @@ name = "postech-ml-engineering-fase-5-datathon"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "jorgeplatero",email = "jorge.platero@outlook.com"}
+    {name = "jorgeplatero", email = "jorge.platero@outlook.com"}
 ]
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "pandas (>=3.0.5,<4.0.0)",
-    "jupyter (>=1.1.1,<2.0.0)"
+    "pandas>=3.0.5",
+    "jupyter>=1.1.1",
+    "scikit-learn>=1.9.1",
+    "mlflow>=3.16.0",
+    "matplotlib>=3.11.2",
+    "graphql-core (<3.3.0)"
 ]
 
+[tool.poetry]
+package-mode = false
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
