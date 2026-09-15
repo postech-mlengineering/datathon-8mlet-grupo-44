@@ -1,0 +1,23 @@
+artifact_path: /home/platero/postech-ml-engineering-fase-5-datathon/notebooks/mlruns/1/models/m-c1da88cf6a2e44f4b208ea87551b6faa/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.skops
+    predict_fn: predict
+    python_version: 3.14.0
+  sklearn:
+    code: null
+    pickled_model: model.skops
+    serialization_format: skops
+    sklearn_version: 1.9.1
+    skops_trusted_types: null
+mlflow_version: 3.16.0
+model_id: m-c1da88cf6a2e44f4b208ea87551b6faa
+model_size_bytes: 14012
+model_uuid: m-c1da88cf6a2e44f4b208ea87551b6faa
+prompts: null
+run_id: 1c63f0a3a1dd4286922dcc26aaa3c076
+utc_time_created: '2026-09-15 02:15:34.985602'
