@@ -6,6 +6,7 @@ from datetime import datetime
 import mlflow
 import numpy as np
 import pandas as pd
+import polars as pl
 import matplotlib.pyplot as plt
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import SGDClassifier
@@ -18,8 +19,9 @@ warnings.filterwarnings('ignore')
 # 0. CONFIGURAÇÃO DE DIRETÓRIOS E MLFLOW
 # =====================================================================
 os.makedirs('mlruns', exist_ok=True)
-mlflow.set_tracking_uri('sqlite:///mlflow.db')
+mlflow.set_tracking_uri("sqlite:///mlflow.db")
 mlflow.set_experiment('bank_marketing_bandit')
+
 
 # Habilita log automático de métricas de sistema (CPU, Memória, Disco)
 mlflow.enable_system_metrics_logging()
@@ -28,18 +30,24 @@ mlflow.enable_system_metrics_logging()
 # 1. PREPARAÇÃO DOS DADOS (BASE COMPARTILHADA)
 # =====================================================================
 print('Carregando e preparando dados base...')
-df_raw = pd.read_csv('data/bank-additional-full.csv', sep=';')
+df_raw = pl.read_csv(
+    'data/bank-additional-full.csv', 
+    separator=';',
+    infer_schema_length=10000 
+)
 
-df_raw['client_id'] = range(1, len(df_raw) + 1)
-df_raw['event_timestamp'] = pd.to_datetime(datetime.now())
+df_raw = df_raw.with_columns([
+    pl.int_range(1, pl.len() + 1).alias('client_id'),
+    pl.lit(datetime.now()).alias('event_timestamp')
+])
 
 os.makedirs('data', exist_ok=True)
-features_df = df_raw.drop(columns=['y', 'duration'])
-features_df.to_parquet('data/bank-additional-full.parquet')
+features_df = df_raw.drop(['y', 'duration'])
+features_df.write_parquet('data/bank-additional-full.parquet')
 
-df_shuffled = df_raw.sample(frac=1, random_state=42).reset_index(drop=True)
+# Shuffle otimizado via Polars e conversão para Pandas para compatibilidade com o modelo
+df_shuffled = df_raw.sample(fraction=1.0, seed=42).to_pandas()
 y_true = np.where(df_shuffled['y'] == 'yes', 1, 0)
-
 
 # =====================================================================
 # 2. LÓGICA DO BANDIT COM TRACING E OBSERVABILIDADE
@@ -54,6 +62,7 @@ def simulate_bandit_and_baseline(
     reward_success=2.0,
 ):
     """Simula a política do Multi-Armed Bandit, Baseline e o Oráculo (Regret)."""
+    # ... (Manter TODO o bloco desta função original e inalterado) ...
     n_samples = x_data.shape[0]
     model = SGDClassifier(
         loss='log_loss', learning_rate='invscaling', eta0=0.1, random_state=42
@@ -97,7 +106,7 @@ def simulate_bandit_and_baseline(
         r_bandit = reward_success if (bandit_action == 1 and actual_y == 1) else (cost if bandit_action == 1 else 0)
         cumulative_bandit += r_bandit
         bandit_rewards.append(cumulative_bandit)
-        
+
         if bandit_action == 1:
             bandit_offers_made += 1
             model.partial_fit(context, [actual_y])
@@ -119,7 +128,7 @@ def simulate_bandit_and_baseline(
         "final_regret": cumulative_optimal - cumulative_bandit,
         "offer_rate_percentage": (bandit_offers_made / (n_samples - warmup)) * 100
     }
-    
+
     return model, bandit_rewards, baseline_rewards, final_metrics
 
 
@@ -130,8 +139,8 @@ def simulate_bandit_and_baseline(
 def run_experiment(view_name, columns, df_shuffled, y_true):
     with mlflow.start_run(run_name=f'bandit_{view_name}') as run:
         print(f"\n--- Treinando e simulando para: {view_name} ---")
-        
-        # Log Params
+
+        # ... (Manter pré-processamento e log_params original) ...
         EPSILON_START, COST_REAL, REWARD_REAL = 0.15, -0.5, 2.0
         mlflow.log_params({
             'feature_view_version': view_name,
@@ -142,7 +151,6 @@ def run_experiment(view_name, columns, df_shuffled, y_true):
             'features_list': str(columns)
         })
 
-        # Processamento
         x_raw = df_shuffled[columns]
         numeric_features = x_raw.select_dtypes(include=['int64', 'float64']).columns
         categorical_features = x_raw.select_dtypes(include=['object', 'category']).columns
@@ -155,35 +163,20 @@ def run_experiment(view_name, columns, df_shuffled, y_true):
         )
         x_processed = preprocessor.fit_transform(x_raw)
 
-        # Simulação (Essa função aparecerá como um nó no Trace do MLflow)
         trained_bandit, rew_bandit, rew_baseline, final_metrics = simulate_bandit_and_baseline(
             x_processed, y_true, df_shuffled,
             epsilon_start=EPSILON_START, cost=COST_REAL, reward_success=REWARD_REAL
         )
 
-        # Log de métricas finais
         mlflow.log_metrics(final_metrics)
 
-        # Observabilidade Visual: Salvar gráfico de performance
-        fig, ax = plt.subplots(figsize=(10, 5))
-        ax.plot(rew_bandit, label='MAB Policy', color='blue')
-        ax.plot(rew_baseline, label='Baseline Policy', color='red')
-        ax.set_title(f'Cumulative Reward over Time - {view_name}')
-        ax.set_xlabel('Interactions (Time Steps)')
-        ax.set_ylabel('Cumulative Reward')
-        ax.legend()
-        ax.grid(True)
-        
-        # Logar o gráfico como artefato no MLflow
-        mlflow.log_figure(fig, f"reward_plot_{view_name}.png")
-        plt.close(fig)
-
-        # Log do Modelo
+        # Log do Modelo com assinalamento de Alias
         full_pipeline = Pipeline([
             ('preprocessor', preprocessor),
             ('classifier', trained_bandit),
         ])
-        mlflow.sklearn.log_model(
+        
+        model_info = mlflow.sklearn.log_model(
             sk_model=full_pipeline,
             name='model_pipeline',
             serialization_format='cloudpickle',
@@ -191,9 +184,16 @@ def run_experiment(view_name, columns, df_shuffled, y_true):
             registered_model_name='bank_marketing_model'
         )
 
+        # ATUALIZAÇÃO MLFLOW 2.14+: Usar Alias em vez de 'latest'
+        mlflow_client = mlflow.MlflowClient()
+        mlflow_client.set_registered_model_alias(
+            "bank_marketing_model", 
+            "champion", 
+            model_info.registered_model_version
+        )
+
         print(f'[{view_name}] Lucro: {final_metrics["final_bandit_reward"]} | Regret: {final_metrics["final_regret"]}')
         print(f'Run ID: {run.info.run_id}')
-
 
 # =====================================================================
 # 4. EXECUÇÃO COMPARATIVA

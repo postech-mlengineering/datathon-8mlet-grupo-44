@@ -7,14 +7,13 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from feast import FeatureStore
-import mlflow
-import pandas as pd
+from mlflow.tracking import MlflowClient
+import polars as pl
 from pydantic import BaseModel
 import requests
 
 # Configuração da URL de tracking do MLflow
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow_serve:5002")
-mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
 app = FastAPI(title="Bank Marketing API MLOps")
 
@@ -81,8 +80,13 @@ else:
 # =====================================================================
 @app.post("/predict")
 def predict_oferta(client_id: int, token: str = Depends(get_current_user)):
-    """Busca features no Feast, realiza predição no MLflow e loga observabilidade."""
+    """Busca features no Feast, realiza predição no MLflow e loga observabilidade de forma thread-safe."""
     start_time = time.time()
+    
+    # Cliente do MLflow isolado para evitar vazamento de contexto em requisições simultâneas
+    mlflow_client = MlflowClient(tracking_uri=MLFLOW_TRACKING_URI)
+    experiment = mlflow_client.get_experiment_by_name("bank_marketing_bandit")
+    exp_id = experiment.experiment_id if experiment else mlflow_client.create_experiment("bank_marketing_bandit")
 
     try:
         feature_vector = store.get_online_features(
@@ -120,15 +124,16 @@ def predict_oferta(client_id: int, token: str = Depends(get_current_user)):
         latency = time.time() - start_time
 
         try:
-            with mlflow.start_run(run_name=f"inference-client-{client_id}"):
-                mlflow.log_param("client_id", client_id)
-                mlflow.log_param("feature_view", ACTIVE_FEATURE_VIEW)
-                mlflow.log_metric("inference_latency_seconds", latency)
-                mlflow.log_metric("probabilidade_aceitacao", prob_success)
-                mlflow.log_metric("valor_esperado", expected_value)
-                mlflow.set_tag("decision", decision)
-                mlflow.set_tag("model_status", "success")
-                mlflow.set_tag("endpoint", "/predict")
+            run = mlflow_client.create_run(exp_id, run_name=f"inference-client-{client_id}")
+            mlflow_client.log_param(run.info.run_id, "client_id", client_id)
+            mlflow_client.log_param(run.info.run_id, "feature_view", ACTIVE_FEATURE_VIEW)
+            mlflow_client.log_metric(run.info.run_id, "inference_latency_seconds", latency)
+            mlflow_client.log_metric(run.info.run_id, "probabilidade_aceitacao", prob_success)
+            mlflow_client.log_metric(run.info.run_id, "valor_esperado", expected_value)
+            mlflow_client.set_tag(run.info.run_id, "decision", decision)
+            mlflow_client.set_tag(run.info.run_id, "model_status", "success")
+            mlflow_client.set_tag(run.info.run_id, "endpoint", "/predict")
+            mlflow_client.set_terminated(run.info.run_id)
         except Exception as obs_err:
             print(f"Aviso: Falha ao registrar métricas no MLflow: {obs_err}")
 
@@ -144,11 +149,12 @@ def predict_oferta(client_id: int, token: str = Depends(get_current_user)):
         raise he
     except Exception as e:
         try:
-            with mlflow.start_run(run_name=f"inference-error-client-{client_id}"):
-                mlflow.log_param("client_id", client_id)
-                mlflow.log_param("feature_view", ACTIVE_FEATURE_VIEW)
-                mlflow.set_tag("model_status", "error")
-                mlflow.set_tag("error_message", str(e))
+            run = mlflow_client.create_run(exp_id, run_name=f"inference-error-client-{client_id}")
+            mlflow_client.log_param(run.info.run_id, "client_id", client_id)
+            mlflow_client.log_param(run.info.run_id, "feature_view", ACTIVE_FEATURE_VIEW)
+            mlflow_client.set_tag(run.info.run_id, "model_status", "error")
+            mlflow_client.set_tag(run.info.run_id, "error_message", str(e))
+            mlflow_client.set_terminated(run.info.run_id, status="FAILED")
         except Exception:
             pass
 
@@ -170,11 +176,17 @@ def get_recommendations(
 ):
     """Analisa todos os clientes da base, ordena e retorna os Top N aprovados."""
     start_time = time.time()
+    
+    # Cliente do MLflow isolado
+    mlflow_client = MlflowClient(tracking_uri=MLFLOW_TRACKING_URI)
+    experiment = mlflow_client.get_experiment_by_name("bank_marketing_bandit")
+    exp_id = experiment.experiment_id if experiment else mlflow_client.create_experiment("bank_marketing_bandit")
 
     try:
         try:
-            df_base = pd.read_parquet("/app/data/bank-additional-full.parquet")
-            client_ids = df_base["client_id"].tolist()
+            # Polars para extração em lote otimizada
+            df_base = pl.read_parquet("/app/data/bank-additional-full.parquet")
+            client_ids = df_base["client_id"].to_list()
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -235,15 +247,17 @@ def get_recommendations(
             recommended_clients = recommended_clients[: request.top_n]
 
         latency = time.time() - start_time
+        
         try:
-            with mlflow.start_run(run_name="inference-campaign"):
-                mlflow.log_param("total_analisados", len(valid_clients))
-                mlflow.log_param("feature_view", ACTIVE_FEATURE_VIEW)
-                mlflow.log_param("top_n_solicitado", request.top_n)
-                mlflow.log_metric("total_recomendados", len(recommended_clients))
-                mlflow.log_metric("inference_latency_seconds", latency)
-        except Exception:
-            pass
+            run = mlflow_client.create_run(exp_id, run_name="inference-campaign")
+            mlflow_client.log_param(run.info.run_id, "total_analisados", len(valid_clients))
+            mlflow_client.log_param(run.info.run_id, "feature_view", ACTIVE_FEATURE_VIEW)
+            mlflow_client.log_param(run.info.run_id, "top_n_solicitado", request.top_n)
+            mlflow_client.log_metric(run.info.run_id, "total_recomendados", len(recommended_clients))
+            mlflow_client.log_metric(run.info.run_id, "inference_latency_seconds", latency)
+            mlflow_client.set_terminated(run.info.run_id)
+        except Exception as obs_err:
+            print(f"Aviso: Falha ao registrar métricas da campanha no MLflow: {obs_err}")
 
         return {
             "resumo": {
@@ -257,6 +271,14 @@ def get_recommendations(
     except HTTPException as he:
         raise he
     except Exception as e:
+        try:
+            run = mlflow_client.create_run(exp_id, run_name="inference-error-campaign")
+            mlflow_client.set_tag(run.info.run_id, "model_status", "error")
+            mlflow_client.set_tag(run.info.run_id, "error_message", str(e))
+            mlflow_client.set_terminated(run.info.run_id, status="FAILED")
+        except Exception:
+            pass
+            
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )

@@ -7,10 +7,11 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - .:/app
+      - .:${PWD}
+    working_dir: ${PWD}
     environment:
       - MLFLOW_URL=http://mlflow_serve:5002/invocations
-      - MLFLOW_TRACKING_URI=http://mlflow_serve:5002
+      - MLFLOW_TRACKING_URI=sqlite:///${PWD}/mlflow.db
     depends_on:
       - mlflow_serve
     restart: always
@@ -23,9 +24,10 @@ services:
     ports:
       - "5002:5002"
     volumes:
-      - .:/app
+      - .:${PWD}
+    working_dir: ${PWD}
     environment:
-      - MLFLOW_TRACKING_URI=sqlite:///mlflow.db
+      - MLFLOW_TRACKING_URI=sqlite:///${PWD}/mlflow.db
     restart: always
 
   mlflow_ui:
@@ -34,19 +36,8 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - .:/app
-    working_dir: /app
+      - .:${PWD}
+    working_dir: ${PWD}
     command: >
-      sh -c "pip install mlflow && mlflow ui --backend-store-uri sqlite:///mlflow.db --host 0.0.0.0 --port 5000"
-    restart: always
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.frontend
-    container_name: frontend_app
-    ports:
-      - "8050:80"
-    depends_on:
-      - fastapi_app
+      sh -c "pip install mlflow && mlflow ui --backend-store-uri sqlite:///${PWD}/mlflow.db --host 0.0.0.0 --port 5000"
     restart: always

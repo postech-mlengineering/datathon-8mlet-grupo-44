@@ -8,4 +8,5 @@ COPY . /app
 
 EXPOSE 5002
 
-CMD ["mlflow", "models", "serve", "-m", "models:/bank_marketing_model/latest", "--host", "0.0.0.0", "--port", "5002", "--env-manager", "local"]
+# Ajustado para usar o Alias @champion suportado pelo MLflow 2.14+
+CMD ["mlflow", "models", "serve", "-m", "models:/bank_marketing_model@champion", "--host", "0.0.0.0", "--port", "5002", "--env-manager", "local"]
