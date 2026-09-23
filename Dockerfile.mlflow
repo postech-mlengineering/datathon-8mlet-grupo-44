@@ -2,10 +2,18 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir mlflow scikit-learn pandas cloudpickle
+RUN pip install --no-cache-dir \
+    cloudpickle \
+    matplotlib \
+    mlflow \
+    pandas \
+    psutil \
+    pyarrow \
+    scikit-learn
 
 COPY . /app
+RUN sed -i 's/\r$//' /app/docker/mlflow-entrypoint.sh
 
 EXPOSE 5002
 
-CMD ["mlflow", "models", "serve", "-m", "models:/bank_marketing_model/latest", "--host", "0.0.0.0", "--port", "5002", "--env-manager", "local"]
+CMD ["sh", "/app/docker/mlflow-entrypoint.sh"]

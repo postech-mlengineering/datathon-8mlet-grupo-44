@@ -18,8 +18,8 @@ warnings.filterwarnings('ignore')
 # 0. CONFIGURAÇÃO DE DIRETÓRIOS E MLFLOW
 # =====================================================================
 os.makedirs('mlruns', exist_ok=True)
-mlflow.set_tracking_uri('sqlite:///mlflow.db')
-mlflow.set_experiment('bank_marketing_bandit')
+mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI', 'sqlite:///mlflow.db'))
+mlflow.set_experiment(os.getenv('MLFLOW_EXPERIMENT_NAME', 'bank_marketing_bandit'))
 
 # Habilita log automático de métricas de sistema (CPU, Memória, Disco)
 mlflow.enable_system_metrics_logging()
