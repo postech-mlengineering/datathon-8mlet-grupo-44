@@ -110,7 +110,7 @@ def predict_oferta(client_id: int, token: str = Depends(get_current_user)):
         if response.status_code != 200:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Erro no serviço de modelo ML",
+                detail=f"Erro no serviço de modelo ML: {response.text}",
             )
 
         prob_success = response.json()["predictions"][0][1]
@@ -196,6 +196,12 @@ def get_recommendations(
                 data_rows.append(row)
                 valid_clients.append(cid)
 
+        if not data_rows:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Nenhum cliente encontrado no Feature Store online. Execute a materialização das features.",
+            )
+
         mlflow_payload = {
             "dataframe_split": {
                 "columns": MODEL_COLUMNS,
@@ -209,7 +215,7 @@ def get_recommendations(
         if response.status_code != 200:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Erro no serviço de modelo ML",
+                detail=f"Erro no serviço de modelo ML: {response.text}",
             )
 
         predictions = response.json()["predictions"]
@@ -257,6 +263,7 @@ def get_recommendations(
     except HTTPException as he:
         raise he
     except Exception as e:
+        print(f"Erro inesperado em /recommendations: {e}", flush=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
