@@ -145,7 +145,7 @@ export default function MotorCampanha({ username, token, apiUrl, onLogout }) {
               disabled={loadingBatch}
               className="w-full"
             >
-              {loadingBatch ? "Executarndo pipeline preditivo no MLflow..." : "Executar"}
+              {loadingBatch ? "Executando pipeline preditivo no MLflow..." : "Executar"}
             </Button>
           </Card>
 
