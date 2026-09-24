@@ -147,6 +147,12 @@ curl -X POST http://localhost:8000/recommendations \
 
 Cada chamada também gera um run no experimento `bank_marketing_bandit` do MLflow, com a latência, a probabilidade, o valor esperado e a decisão.
 
+## ARQUITETURA ALVO EM NUVEM (AWS) 
+
+Usaríamos a AWS. Como a API, o serving do modelo e a UI do MLflow já estão em containers, as imagens iriam para o **Amazon ECR** e rodariam em maquina **Amazon ECS**, sem precisar gerenciar servidor, atrás de um **Application Load Balancer** com HTTPS. O frontend em React é só um site estático depois do `npm run build`, então ficaria num bucket **S3** servido pelo **CloudFront**. Os dados (csv/parquet do Feast) e os artefatos do MLflow (pasta `mlruns/`) também iriam para o **S3**, e o `mlflow.db` em SQLite seria trocado por um PostgreSQL no **Amazon RDS**, para vários containers poderem ler e escrever ao mesmo tempo.
+
+No Feast, o offline store continuaria lendo o parquet do S3 e o online store sairia do SQLite para o **DynamoDB** (ou Redis no **ElastiCache**), que aguenta as consultas da API com baixa latência. Senhas e chaves ficariam no **Secrets Manager**, os logs e alertas no **CloudWatch**, e o retreino do bandit (`main.py`) e o `feast materialize` poderiam rodar periodicamente como tarefas agendadas pelo **EventBridge** no próprio ECS. O deploy seria automatizado com **GitHub Actions**, que builda as imagens, envia para o ECR e atualiza os serviços a cada push na `main`.
+
 ## Observações
 
 - Para trocar a feature view usada pela API, defina `FEATURE_VIEW_NAME` (`bank_features` ou `bank_features_v2`) no serviço `fastapi_app`.
