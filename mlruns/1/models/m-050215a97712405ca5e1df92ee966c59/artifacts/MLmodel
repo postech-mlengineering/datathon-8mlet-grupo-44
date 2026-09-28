@@ -1,4 +1,4 @@
-artifact_path: /home/platero/postech-ml-engineering-fase-5-datathon/mlruns/1/models/m-985f03534c0c443b937c8b49374718fd/artifacts
+artifact_path: /home/platero/postech-ml-engineering-fase-5-datathon/mlruns/1/models/m-050215a97712405ca5e1df92ee966c59/artifacts
 flavors:
   python_function:
     env:
@@ -15,9 +15,9 @@ flavors:
     sklearn_version: 1.9.1
     skops_trusted_types: null
 mlflow_version: 3.16.1
-model_id: m-985f03534c0c443b937c8b49374718fd
+model_id: m-050215a97712405ca5e1df92ee966c59
 model_size_bytes: 4340
-model_uuid: m-985f03534c0c443b937c8b49374718fd
+model_uuid: m-050215a97712405ca5e1df92ee966c59
 prompts: null
-run_id: de290d51a0e34171b19de9c18366c2bc
-utc_time_created: '2026-09-23 03:19:24.845773'
+run_id: 2febf8ab08d742c8a70631845942a0dc
+utc_time_created: '2026-09-28 22:25:14.674566'

@@ -12,7 +12,7 @@ import polars as pl
 from pydantic import BaseModel
 import requests
 
-# Configuração da URL de tracking do MLflow
+#configuração da URL de tracking do MLflow
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow_serve:5002")
 
 app = FastAPI(title="Bank Marketing API MLOps")
@@ -54,7 +54,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
 # --- CONFIGURAÇÃO DINÂMICA DA FEATURE VIEW ATIVA ---
 ACTIVE_FEATURE_VIEW = os.getenv("FEATURE_VIEW_NAME", "bank_features_v2")
 
-# Mapeamento estrito baseado apenas na versão ativa configurada no ambiente
+#mapeamento estrito baseado apenas na versão ativa configurada no ambiente
 if ACTIVE_FEATURE_VIEW == "bank_features_v2":
     MODEL_COLUMNS = [
         "age", "job", "marital", "education", "default", "housing", "loan",
@@ -177,14 +177,14 @@ def get_recommendations(
     """Analisa todos os clientes da base, ordena e retorna os Top N aprovados."""
     start_time = time.time()
     
-    # Cliente do MLflow isolado
+    #cliente do MLflow isolado
     mlflow_client = MlflowClient(tracking_uri=MLFLOW_TRACKING_URI)
     experiment = mlflow_client.get_experiment_by_name("bank_marketing_bandit")
     exp_id = experiment.experiment_id if experiment else mlflow_client.create_experiment("bank_marketing_bandit")
 
     try:
         try:
-            # Polars para extração em lote otimizada
+            #polars para extração em lote otimizada
             df_base = pl.read_parquet("/app/data/bank-additional-full.parquet")
             client_ids = df_base["client_id"].to_list()
         except Exception as exc:
